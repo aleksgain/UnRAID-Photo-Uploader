@@ -1,33 +1,17 @@
 #!/bin/bash
 PATH=/usr/local/sbin:/usr/sbin:/sbin:/usr/local/bin:/usr/bin:/bin
 
-## Usage (after configuration):
-## 1. Insert camera's memory card into a USB port on your unRAID system
-## 2. The system will automatically move (or copy) any images/videos from the memory card to the array
-## 3. Wait for the imperial theme to play, then remove the memory card
-
-## Preparation:
-## 1. Install jhead (to automatically rotate photos) using the Nerd Pack plugin
-## 2. Install the "Unassigned Devices" plugin
-## 3. Use that plugin to set this script to run *in the background* when a memory card is inserted
-## 4. Configure variables in this script as described below
-
-## --- BEGIN CONFIGURATION ---
-
-## SET THIS FOR YOUR CAMERAS: 
-## array of directories under /DCIM/ that contain files you want to move (or copy)
-## can contain regex
+# array of directories under /DCIM/ that contain files you want to move (or copy)
 VALIDDIRS=("/DCIM/[0-9][0-9][0-9]_PANA" "/DCIM/[0-9][0-9][0-9]OLYMP" "/DCIM/[0-9][0-9][0-9]MEDIA" "/DCIM/[0-9][0-9][0-9]GOPRO")
-## SET THIS FOR YOUR SYSTEM:
-## location to move files to. use date command to ensure unique dir
+# location to move files to. use date command to ensure unique dir
 DESTINATION_PHOTO="/mnt/user/Photo/$(date +"%m-%d-%Y")/"
+DESTINATION_PHOTO_EXPORT="/mnt/user/Photo/EXPORT/"
 DESTINATION_VIDEO="/mnt/user/Video/$(date +"%m-%d-%Y")/"
 
-## SET THIS FOR YOUR SYSTEM:
-## change to "move" when you are confident everything is working
+# change to "move" when you are confident everything is working
 MOVE_OR_COPY="move"
 
-## set this to 1 and check the syslog for additional debugging info
+# set this to 1 and check the syslog for additional debugging info
 DEBUG=""
 
 log_all() {
@@ -81,7 +65,8 @@ case $ACTION in
                 if [[ ${DIR} =~ ${element} ]]; then
                   # process this dir
                   log_local "${MOVEMSG} ${DIR}/ to ${DESTINATION_PHOTO}"
-                  rsync -a ${RSYNCFLAG} --include="*/" --include="*.RW2" --include="*.ORF" --include="*.jpg" --include="*.jpeg" --exclude="*" "${DIR}/" "${DESTINATION_PHOTO}"
+                  rsync -a ${RSYNCFLAG} --include="*/" --include="*.RW2" --include="*.ORF" --exclude="*" "${DIR}/" "${DESTINATION_PHOTO}"
+                  rsync -a ${RSYNCFLAG} --include="*/" --include="*.JPG" --include="*.JPEG" --exclude="*" "${DIR}/" "${DESTINATION_PHOTO_EXPORT}"
                 log_local "${MOVEMSG} ${DIR}/ to ${DESTINATION_VIDEO}"
                   rsync -a ${RSYNCFLAG} --include="*/" --include="*.MP4" --include="*.mov" --exclude="*" "${DIR}/" "${DESTINATION_VIDEO}"
                   # remove empty directory from memory card
@@ -98,6 +83,7 @@ case $ACTION in
 
             log_debug "fixing permissions on ${DESTINATION_PHOTO}"
             newperms "${DESTINATION_PHOTO}"
+            newperms "${DESTINATION_PHOTO_EXPORT}"
 
           fi
 
@@ -111,6 +97,11 @@ case $ACTION in
           # sync and unmount USB drive 
           sync
           /usr/local/sbin/rc.unassigned umount $DEVICE
+
+
+          # initiate upload to Google Photos
+          docker exec -d gphotos-uploader run
+
 
           # send notification
           /usr/local/emhttp/webGui/scripts/notify -e "unRAID Server Notice" -s "Photo Import" -d "Photo Import completed" -i "normal"
@@ -130,4 +121,5 @@ case $ACTION in
 
     log_all "Photo Import drive unmounted, can safely be removed"
   ;;
+
 esac
